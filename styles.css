@@ -77,7 +77,7 @@ h1 { margin: 0; max-width: 850px; font-size: clamp(28px, 3vw, 44px); line-height
 .card-date { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .edit-field { width: 100%; min-height: 38px; padding: 7px 9px; border: 1px solid #bbc4cf; border-radius: 8px; color: var(--ink); background: #fff; }
 .edit-field:invalid { border-color: var(--danger); }
-.project-editor { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; margin: 16px 0 0; padding: 16px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); border-radius: 12px; }
+.project-editor { display: grid; grid-template-columns: 1.35fr .8fr 1fr 1fr; gap: 12px; margin: 16px 0 0; padding: 16px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); border-radius: 12px; }
 .project-editor label { display: grid; gap: 6px; color: #dbeaf5; font-size: 12px; font-weight: 650; }
 
 .gantt-card { overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
