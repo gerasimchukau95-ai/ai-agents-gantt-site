@@ -12,6 +12,7 @@ const fmtDate = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-dig
 const fmtDateShort = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
 const fmtDateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" });
 const monthFmt = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric", timeZone: "UTC" });
+const periodMonthFmt = new Intl.DateTimeFormat("ru-RU", { month: "long", timeZone: "UTC" });
 
 const state = {
   data: null, draft: null, editing: false, localMode: false, loading: true,
@@ -57,6 +58,16 @@ function select(name, value, options = STATUSES) {
   return `<select class="edit-field" data-field="${esc(name)}">${options.map(o => `<option ${o === value ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
 }
 
+function projectPeriod(project) {
+  const start = parseDate(project.startDate);
+  const end = parseDate(project.endDate);
+  const startMonth = periodMonthFmt.format(start);
+  const endMonth = periodMonthFmt.format(end);
+  return start.getUTCFullYear() === end.getUTCFullYear()
+    ? `${startMonth} — ${endMonth} ${end.getUTCFullYear()}`
+    : `${startMonth} ${start.getUTCFullYear()} — ${endMonth} ${end.getUTCFullYear()}`;
+}
+
 function render() {
   if (state.loading) return;
   const data = currentData();
@@ -65,7 +76,7 @@ function render() {
       <div class="topbar-inner">
         <p class="eyebrow">Статус единого проекта</p>
         <div class="headline-row">
-          <div><h1>${esc(data.project.name)}</h1><p class="subtitle">Период: сентябрь — декабрь 2026 · Плановое завершение ${fmt(data.project.endDate)}</p></div>
+          <div><h1>${esc(data.project.name)}</h1><p class="subtitle">Период: ${esc(projectPeriod(data.project))} · Плановое завершение ${fmt(data.project.endDate)}</p></div>
           <div class="header-actions">${state.editing
             ? `<button class="btn btn-ghost-light" data-action="cancel-edit">Отменить</button><button class="btn btn-light" data-action="save">${icon("save")}Сохранить изменения</button>`
             : `<button class="btn btn-light" data-action="start-edit">${icon("edit")}Редактировать</button>`}
@@ -81,7 +92,7 @@ function render() {
         <div class="cards">${data.workstreams.filter(w => w.kind === "solution").sort((a,b) => a.order-b.order).map(solutionCard).join("")}</div>
       </section>
       <section class="section" aria-labelledby="gantt-title">
-        <div class="section-head"><div><h2 class="section-title" id="gantt-title">Календарный план</h2><p class="section-copy">Иерархия проекта, этапы и контрольные точки с сентября по декабрь 2026</p></div></div>
+        <div class="section-head"><div><h2 class="section-title" id="gantt-title">Календарный план</h2><p class="section-copy">Иерархия проекта, этапы и контрольные точки за период ${esc(projectPeriod(data.project))}</p></div></div>
         ${gantt(data)}
       </section>
     </main>
@@ -94,7 +105,8 @@ function projectEditor(project) {
   return `<div class="project-editor">
     <label>Статус проекта${select("project.status", project.status)}</label>
     <label>Общая готовность, %${input("project.progress", project.progress, "number", 'min="0" max="100"')}</label>
-    <label>Плановое завершение${input("project.endDate", project.endDate, "date")}</label>
+    <label>Начало проекта${input("project.startDate", project.startDate, "date", `max="${esc(project.endDate)}"`)}</label>
+    <label>Плановое завершение${input("project.endDate", project.endDate, "date", `min="${esc(project.startDate)}"`)}</label>
   </div>`;
 }
 
@@ -152,12 +164,13 @@ function rowLeft(row) {
   const expanded = !state.collapsed.has(item.id);
   const status = row.type === "task" || row.type === "milestone" ? effectiveStatus(item) : item.status;
   const editableTask = state.editing && (row.type === "task" || row.type === "milestone");
+  const dateBounds = `min="${esc(data.project.startDate)}" max="${esc(data.project.endDate)}"`;
   const name = editableTask ? input(`task.${item.id}.name`, item.name) : `<span class="name-text" title="${esc(item.name)}">${esc(item.name)}</span>`;
   const controls = editableTask ? `<span class="row-actions"><button class="icon-btn" data-action="move-up" data-id="${esc(item.id)}" title="Выше" aria-label="Переместить выше">${icon("up")}</button><button class="icon-btn" data-action="move-down" data-id="${esc(item.id)}" title="Ниже" aria-label="Переместить ниже">${icon("down")}</button><button class="icon-btn danger" data-action="delete-task" data-id="${esc(item.id)}" title="Удалить" aria-label="Удалить">${icon("trash")}</button></span>` : "";
   return `<div class="row-left ${editableTask ? "edit-task-row" : ""}" data-level="${row.level}" data-type="${row.type}">
     <div class="name-cell" style="--level:${row.level}">${canCollapse ? `<button class="collapse" data-action="collapse" data-id="${esc(item.id)}" aria-expanded="${expanded}" aria-label="${expanded ? "Свернуть" : "Развернуть"} группу">${icon("chevron")}</button>` : `<span style="width:30px;flex:0 0 auto"></span>`}${name}${controls}</div>
-    <div class="date-cell">${editableTask ? input(`task.${item.id}.startDate`, range.startDate, "date") : fmtShort(range.startDate)}</div>
-    <div class="date-cell">${editableTask ? input(`task.${item.id}.endDate`, range.endDate, "date", row.type === "milestone" ? "disabled" : "") : fmtShort(range.endDate)}</div>
+    <div class="date-cell">${editableTask ? input(`task.${item.id}.startDate`, range.startDate, "date", dateBounds) : fmtShort(range.startDate)}</div>
+    <div class="date-cell">${editableTask ? input(`task.${item.id}.endDate`, range.endDate, "date", `${dateBounds}${row.type === "milestone" ? " disabled" : ""}`) : fmtShort(range.endDate)}</div>
     <div>${editableTask ? select(`task.${item.id}.status`, item.status) : statusBadge(status)}</div>
     <div class="percent-cell">${editableTask ? input(`task.${item.id}.progress`, item.progress, "number", 'min="0" max="100"') : `${esc(item.progress)}%`}</div>
   </div>`;
@@ -290,7 +303,7 @@ function closeModal() { state.modal = null; render(); }
 function renderModal() {
   if (state.modal.type === "login") return `<div class="modal-backdrop" role="presentation"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h2 id="modal-title">Режим редактирования</h2><p>Введите административный пароль. Проверка выполняется на сервере.</p><label class="form-group">Пароль<input class="edit-field" id="admin-password" type="password" autocomplete="current-password"></label>${state.modal.error ? `<div class="error" role="alert">${esc(state.modal.error)}</div>` : ""}<div class="modal-actions"><button class="btn btn-secondary" data-action="close-modal">Отмена</button><button class="btn btn-primary" data-action="submit-login">Продолжить</button></div></section></div>`;
   const type = state.modal.taskType;
-  return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h2 id="modal-title">${type === "milestone" ? "Новая контрольная точка" : "Новый этап"}</h2><p>Элемент появится внутри выбранной группы.</p><label class="form-group">Группа<select class="edit-field" id="add-workstream">${state.draft.workstreams.sort((a,b)=>a.order-b.order).map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("")}</select></label><label class="form-group">Название<input class="edit-field" id="add-name"></label><label class="form-group">Дата начала<input class="edit-field" id="add-start" type="date" value="${state.draft.project.startDate}"></label>${type === "task" ? `<label class="form-group">Дата окончания<input class="edit-field" id="add-end" type="date" value="${state.draft.project.startDate}"></label>` : ""}${state.modal.error ? `<div class="error">${esc(state.modal.error)}</div>` : ""}<div class="modal-actions"><button class="btn btn-secondary" data-action="close-modal">Отмена</button><button class="btn btn-primary" data-action="submit-add">Добавить</button></div></section></div>`;
+  return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h2 id="modal-title">${type === "milestone" ? "Новая контрольная точка" : "Новый этап"}</h2><p>Элемент появится внутри выбранной группы.</p><label class="form-group">Группа<select class="edit-field" id="add-workstream">${state.draft.workstreams.sort((a,b)=>a.order-b.order).map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("")}</select></label><label class="form-group">Название<input class="edit-field" id="add-name"></label><label class="form-group">Дата начала<input class="edit-field" id="add-start" type="date" min="${state.draft.project.startDate}" max="${state.draft.project.endDate}" value="${state.draft.project.startDate}"></label>${type === "task" ? `<label class="form-group">Дата окончания<input class="edit-field" id="add-end" type="date" min="${state.draft.project.startDate}" max="${state.draft.project.endDate}" value="${state.draft.project.startDate}"></label>` : ""}${state.modal.error ? `<div class="error">${esc(state.modal.error)}</div>` : ""}<div class="modal-actions"><button class="btn btn-secondary" data-action="close-modal">Отмена</button><button class="btn btn-primary" data-action="submit-add">Добавить</button></div></section></div>`;
 }
 
 function submitAdd() {
