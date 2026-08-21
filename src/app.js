@@ -281,7 +281,7 @@ function handleAction(event) {
 function handleField(event) {
   const path = event.currentTarget.dataset.field.split(".");
   let value = event.currentTarget.value;
-  if (path.at(-1) === "progress") value = clamp(Number(value), 0, 100);
+  if (path.at(-1) === "progress") value = Math.round(clamp(Number(value) || 0, 0, 100));
   if (path[0] === "project") state.draft.project[path[1]] = value;
   if (path[0] === "workstream") state.draft.workstreams.find(w => w.id === path[1])[path[2]] = value;
   if (path[0] === "task") {
@@ -355,7 +355,11 @@ async function save() {
     if (state.localMode) localStorage.setItem(LOCAL_KEY, JSON.stringify(payload));
     else {
       const response = await fetch(apiUrl(""), { method:"PUT", headers:{"Content-Type":"application/json", "Authorization":`Bearer ${state.adminToken}`}, body:JSON.stringify(payload) });
-      if (!response.ok) { const body = await response.json().catch(()=>({})); throw new Error(body.error || "Сохранение не выполнено."); }
+      if (!response.ok) {
+        const body = await response.json().catch(()=>({}));
+        const message = [body.error, body.detail].filter(Boolean).join(" ");
+        throw new Error(message || "Сохранение не выполнено.");
+      }
       await response.json();
     }
     state.draft = null; state.editing = false;
