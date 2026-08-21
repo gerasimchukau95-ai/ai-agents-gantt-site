@@ -16,7 +16,7 @@ const periodMonthFmt = new Intl.DateTimeFormat("ru-RU", { month: "long", timeZon
 
 const state = {
   data: null, draft: null, editing: false, localMode: false, loading: true,
-  collapsed: new Set(), modal: null, toastTimer: null,
+  loadError: "", collapsed: new Set(), modal: null, toastTimer: null,
   adminToken: sessionStorage.getItem("ai-agents-admin-token") || ""
 };
 
@@ -36,14 +36,25 @@ const icon = (name) => ({
 }[name] || "");
 
 async function load() {
+  state.loading = true;
+  state.loadError = "";
   try {
-    const response = await fetch(apiUrl(""), { headers: { Accept: "application/json" } });
+    const response = await fetch(apiUrl(""), {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
     if (!response.ok) throw new Error(`API ${response.status}`);
     state.data = await response.json();
-  } catch {
-    state.localMode = true;
-    try { state.data = JSON.parse(localStorage.getItem(LOCAL_KEY)) || cloneInitialData(); }
-    catch { state.data = cloneInitialData(); }
+    state.localMode = false;
+  } catch (error) {
+    if (!SUPABASE_FUNCTION_URL) {
+      state.localMode = true;
+      try { state.data = JSON.parse(localStorage.getItem(LOCAL_KEY)) || cloneInitialData(); }
+      catch { state.data = cloneInitialData(); }
+    } else {
+      state.data = null;
+      state.loadError = "Не удалось загрузить общие данные проекта. Проверьте соединение и повторите попытку.";
+    }
   }
   state.loading = false;
   render();
@@ -69,7 +80,15 @@ function projectPeriod(project) {
 }
 
 function render() {
-  if (state.loading) return;
+  if (state.loading) {
+    root.innerHTML = `<div class="load-state"><div class="load-spinner" aria-hidden="true"></div><p>Загружаем данные проекта…</p></div>`;
+    return;
+  }
+  if (state.loadError) {
+    root.innerHTML = `<div class="load-state load-error" role="alert"><h1>Сервер временно недоступен</h1><p>${esc(state.loadError)}</p><button class="btn btn-primary" data-action="retry-load">Повторить</button></div>`;
+    bindEvents();
+    return;
+  }
   const data = currentData();
   root.innerHTML = `<div class="app-shell">
     <header class="topbar">
@@ -119,7 +138,7 @@ function summary(data) {
     <article class="metric"><div class="metric-label">Общая готовность</div><div class="metric-value">${esc(data.project.progress)}%</div><div class="progress" style="--progress:${clamp(Number(data.project.progress),0,100)}%"><span></span></div></article>
     <article class="metric"><div class="metric-label">Этапы</div><div class="metric-value">${done} / ${tasks.length}</div><div class="metric-note">завершено</div></article>
     <article class="metric"><div class="metric-label">Просрочено</div><div class="metric-value">${overdue}</div><div class="metric-note">определяется автоматически</div></article>
-    <article class="metric"><div class="metric-label">Последнее обновление</div><div class="metric-value" style="font-size:16px">${formatUpdated(data.project.updatedAt)}</div><div class="metric-note">${state.localMode ? "Локальный режим" : "Общие данные D1"}</div></article>
+    <article class="metric"><div class="metric-label">Последнее обновление</div><div class="metric-value" style="font-size:16px">${formatUpdated(data.project.updatedAt)}</div><div class="metric-note">${state.localMode ? "Локальный режим разработки" : "Общие данные Supabase"}</div></article>
   </section>`;
 }
 
@@ -241,6 +260,7 @@ function bindEvents() {
 
 function handleAction(event) {
   const { action, id } = event.currentTarget.dataset;
+  if (action === "retry-load") return load();
   if (action === "start-edit") return startEdit();
   if (action === "cancel-edit") { state.editing = false; state.draft = null; render(); return; }
   if (action === "save") return save();
@@ -336,9 +356,15 @@ async function save() {
     else {
       const response = await fetch(apiUrl(""), { method:"PUT", headers:{"Content-Type":"application/json", "Authorization":`Bearer ${state.adminToken}`}, body:JSON.stringify(payload) });
       if (!response.ok) { const body = await response.json().catch(()=>({})); throw new Error(body.error || "Сохранение не выполнено."); }
-      Object.assign(payload, await response.json());
+      await response.json();
     }
-    state.data = payload; state.draft = null; state.editing = false; render(); toast("Изменения сохранены.", "success");
+    state.draft = null; state.editing = false;
+    if (state.localMode) {
+      state.data = payload; render();
+    } else {
+      await load();
+    }
+    toast("Изменения сохранены и доступны всем.", "success");
   } catch (error) { toast(error.message, "error"); }
 }
 
